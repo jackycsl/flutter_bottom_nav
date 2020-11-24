@@ -1,53 +1,20 @@
 import 'package:flutter/material.dart';
-
-void main() {
-  runApp(MaterialApp(home: HomePage(), debugShowCheckedModeBanner: false));
-}
+import 'package:flutter/rendering.dart';
 
 class Destination {
-  const Destination(this.title, this.icon, this.color);
+  const Destination(this.index, this.title, this.icon, this.color);
+  final int index;
   final String title;
   final IconData icon;
   final MaterialColor color;
 }
 
 const List<Destination> allDestinations = <Destination>[
-  Destination('Home', Icons.home, Colors.teal),
-  Destination('Business', Icons.business, Colors.cyan),
-  Destination('School', Icons.school, Colors.orange),
-  Destination('Flight', Icons.flight, Colors.blue)
+  Destination(0, 'Home', Icons.home, Colors.teal),
+  Destination(1, 'Business', Icons.business, Colors.cyan),
+  Destination(2, 'School', Icons.school, Colors.orange),
+  Destination(3, 'Flight', Icons.flight, Colors.blue)
 ];
-
-class DestinationView extends StatefulWidget {
-  const DestinationView({Key key, this.destination}) : super(key: key);
-  final Destination destination;
-
-  @override
-  _DestinationViewState createState() => _DestinationViewState();
-}
-
-class _DestinationViewState extends State<DestinationView> {
-  @override
-  Widget build(BuildContext context) {
-    return Navigator(
-      onGenerateRoute: (RouteSettings settings) {
-        return MaterialPageRoute(
-          settings: settings,
-          builder: (BuildContext context) {
-            switch (settings.name) {
-              case '/':
-                return RootPage(destination: widget.destination);
-              case '/list':
-                return ListPage(destination: widget.destination);
-              case '/text':
-                return TextPage(destination: widget.destination);
-            }
-          },
-        );
-      },
-    );
-  }
-}
 
 class RootPage extends StatelessWidget {
   const RootPage({Key key, this.destination}) : super(key: key);
@@ -113,7 +80,7 @@ class ListPage extends StatelessWidget {
                   },
                   child: Center(
                     child: Text('Item $index',
-                        style: Theme.of(context).primaryTextTheme.headline4),
+                        style: Theme.of(context).primaryTextTheme.display1),
                   ),
                 ),
               ),
@@ -168,6 +135,38 @@ class _TextPageState extends State<TextPage> {
   }
 }
 
+class DestinationView extends StatefulWidget {
+  const DestinationView({Key key, this.destination}) : super(key: key);
+
+  final Destination destination;
+
+  @override
+  _DestinationViewState createState() => _DestinationViewState();
+}
+
+class _DestinationViewState extends State<DestinationView> {
+  @override
+  Widget build(BuildContext context) {
+    return Navigator(
+      onGenerateRoute: (RouteSettings settings) {
+        return MaterialPageRoute(
+          settings: settings,
+          builder: (BuildContext context) {
+            switch (settings.name) {
+              case '/':
+                return RootPage(destination: widget.destination);
+              case '/list':
+                return ListPage(destination: widget.destination);
+              case '/text':
+                return TextPage(destination: widget.destination);
+            }
+          },
+        );
+      },
+    );
+  }
+}
+
 class HomePage extends StatefulWidget {
   @override
   _HomePageState createState() => _HomePageState();
@@ -175,16 +174,59 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage>
     with TickerProviderStateMixin<HomePage> {
+  List<Key> _destinationKeys;
+  List<AnimationController> _faders;
   int _currentIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _faders =
+        allDestinations.map<AnimationController>((Destination destination) {
+      return AnimationController(
+          vsync: this, duration: Duration(milliseconds: 200));
+    }).toList();
+    _faders[_currentIndex].value = 1.0;
+    _destinationKeys =
+        List<Key>.generate(allDestinations.length, (int index) => GlobalKey())
+            .toList();
+  }
+
+  @override
+  void dispose() {
+    for (AnimationController controller in _faders) controller.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
         top: false,
-        child: IndexedStack(
-          index: _currentIndex,
-          children: allDestinations.map<Widget>((Destination destination) {
-            return DestinationView(destination: destination);
+        child: Stack(
+          fit: StackFit.expand,
+          children: allDestinations.map((Destination destination) {
+            final Widget view = FadeTransition(
+              opacity: _faders[destination.index]
+                  .drive(CurveTween(curve: Curves.fastOutSlowIn)),
+              child: KeyedSubtree(
+                key: _destinationKeys[destination.index],
+                child: DestinationView(
+                  destination: destination,
+                ),
+              ),
+            );
+            if (destination.index == _currentIndex) {
+              _faders[destination.index].forward();
+              return view;
+            } else {
+              _faders[destination.index].reverse();
+              if (_faders[destination.index].isAnimating) {
+                return IgnorePointer(child: view);
+              }
+              return Offstage(child: view);
+            }
           }).toList(),
         ),
       ),
@@ -197,12 +239,15 @@ class _HomePageState extends State<HomePage>
         },
         items: allDestinations.map((Destination destination) {
           return BottomNavigationBarItem(
-            icon: Icon(destination.icon),
-            backgroundColor: destination.color,
-            label: destination.title,
-          );
+              icon: Icon(destination.icon),
+              backgroundColor: destination.color,
+              title: Text(destination.title));
         }).toList(),
       ),
     );
   }
+}
+
+void main() {
+  runApp(MaterialApp(home: HomePage()));
 }
